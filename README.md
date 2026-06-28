@@ -15,9 +15,10 @@ first (e.g. on a home server), and go public later.
   clustering** (Leaflet + OpenStreetMap, no API key)
 - ▦ **Gallery view** — responsive grid grouped by **trip → day**, lazy-loaded,
   with a keyboard-navigable lightbox (← → to move, Esc to close)
-- ⬆️ **Add photos two ways** — drag-free **web upload** (pick/name a trip) or
-  **bulk folder drop** into `data/photos/<trip>/` (auto-ingested via a systemd
-  inotify watcher). Ingestion is single-flight + coalesced.
+- ⬆️ **Add photos three ways** — **web upload** (pick/name a trip), **bulk folder
+  drop** into `data/photos/<trip>/` (auto-ingested via a systemd inotify watcher),
+  or **import from OneDrive** (browse & select, optional). Ingestion is
+  single-flight + coalesced.
 - 🗂️ **Trips** — organize photos as `data/photos/<trip>/...`, reused across vacations
 - 🏞️ **Real place names & fun facts (no API keys)** — reverse-geocoding via
   OpenStreetMap **Nominatim** + the nearest notable **Wikipedia** landmark with a
@@ -45,7 +46,8 @@ backend/        FastAPI app + photo ingest pipeline
     ingest.py            scan photos -> EXIF/GPS + thumbnails -> enrich -> data/cache/index.json
     enrich/              ingest-time geocoding (Nominatim) + facts (Wikipedia); cached
     identification/      pluggable providers (none / mock / claude)
-    routers/photos.py    REST API + image/thumbnail serving (lightweight runtime)
+    sources/onedrive.py  optional OneDrive import (device-code OAuth, Graph)
+    routers/             REST API: photos, manage (upload/ingest), onedrive
 frontend/       Vite + React + Leaflet map UI
 deploy/         systemd units (socket activation + idle exit), backup, install.sh
 scripts/        seed_sample.py (demo photos with fake GPS)
@@ -91,6 +93,33 @@ cd backend && python -m app.ingest      # re-run after adding photos
 
 Photos need GPS EXIF data to appear on the map (most phone photos have it).
 Photos without GPS are still indexed and listed in the sidebar.
+
+### Importing from OneDrive (optional)
+
+wildlens can browse your OneDrive and import selected photos. It uses the OAuth
+**device-code flow** (works on a headless server) and stores only a refresh token
+in gitignored `data/` — never the repo.
+
+One-time Azure app registration (free):
+
+1. **https://entra.microsoft.com** → **App registrations** → **New registration**
+2. Name `wildlens`; **Supported account types:** *Personal Microsoft accounts only*;
+   leave Redirect URI blank → **Register**
+3. Copy the **Application (client) ID**
+4. **Authentication** → set **Allow public client flows** = **Yes** → Save
+5. **API permissions** → Microsoft Graph → **Delegated** → add **Files.Read** and
+   **offline_access**
+
+Then set in `.env` and restart:
+
+```bash
+WILDLENS_ONEDRIVE_CLIENT_ID=<your-application-client-id>
+WILDLENS_ONEDRIVE_TENANT=consumers   # personal accounts
+```
+
+A **☁ OneDrive** button appears in the app: click **Connect** (enter the shown
+code at the given URL), browse to a folder, select photos, pick a trip, and
+**Import** — they download locally (originals, GPS preserved) and ingest normally.
 
 ## Production / deploying to a LAN host (e.g. `shumai`)
 

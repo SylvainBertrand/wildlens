@@ -44,3 +44,36 @@ export async function fetchIngestStatus() {
   if (!res.ok) throw new Error(`Failed to fetch ingest status (${res.status})`)
   return res.json()
 }
+
+// --- OneDrive import source ---
+const ONEDRIVE = '/api/sources/onedrive'
+
+async function odJson(path, opts) {
+  const res = await fetch(`${ONEDRIVE}${path}`, opts)
+  if (!res.ok) {
+    let detail
+    try {
+      detail = (await res.json())?.detail
+    } catch {
+      detail = null
+    }
+    throw new Error((typeof detail === 'string' && detail) || `Request failed (${res.status})`)
+  }
+  return res.json()
+}
+
+export const onedrive = {
+  status: () => odJson('/status'),
+  connect: () => odJson('/connect', { method: 'POST' }),
+  connectStatus: () => odJson('/connect/status'),
+  disconnect: () => odJson('/disconnect', { method: 'POST' }),
+  browse: (itemId) => odJson(`/browse${itemId ? `?item_id=${encodeURIComponent(itemId)}` : ''}`),
+  thumbUrl: (itemId) => `${ONEDRIVE}/thumb/${encodeURIComponent(itemId)}`,
+  import: (trip, itemIds) =>
+    odJson('/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trip, item_ids: itemIds }),
+    }),
+  importStatus: () => odJson('/import/status'),
+}

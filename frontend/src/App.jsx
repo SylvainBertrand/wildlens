@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchPhotos, fetchIngestStatus } from './api'
+import { fetchPhotos, fetchIngestStatus, onedrive } from './api'
 import MapView from './components/MapView'
 import Gallery from './components/Gallery'
 import Sidebar from './components/Sidebar'
 import Lightbox from './components/Lightbox'
 import UploadPanel from './components/UploadPanel'
+import OneDriveModal from './components/OneDriveModal'
 import { groupByTripAndDay } from './lib/grouping'
 import './App.css'
 
@@ -15,6 +16,8 @@ export default function App() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
   const [ingesting, setIngesting] = useState(false)
+  const [odConfigured, setOdConfigured] = useState(false)
+  const [showOneDrive, setShowOneDrive] = useState(false)
   const pollRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -27,6 +30,10 @@ export default function App() {
     load()
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
+    onedrive
+      .status()
+      .then((s) => setOdConfigured(!!s.configured))
+      .catch(() => setOdConfigured(false))
   }, [load])
 
   // After an upload, poll ingest status until idle, then refresh the photos.
@@ -85,6 +92,11 @@ export default function App() {
           </button>
         </div>
         <UploadPanel trips={data.trips} onUploaded={watchIngest} />
+        {odConfigured && (
+          <button className="od-open-btn" onClick={() => setShowOneDrive(true)}>
+            ☁ OneDrive
+          </button>
+        )}
       </header>
 
       {ingesting && <div className="ingest-banner">Processing new photos…</div>}
@@ -134,6 +146,14 @@ export default function App() {
         hasPrev={navIndex > 0}
         hasNext={navIndex >= 0 && navIndex < navOrder.length - 1}
       />
+
+      {showOneDrive && (
+        <OneDriveModal
+          trips={data.trips}
+          onClose={() => setShowOneDrive(false)}
+          onImported={watchIngest}
+        />
+      )}
     </div>
   )
 }

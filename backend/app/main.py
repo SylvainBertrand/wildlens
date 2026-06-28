@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import REPO_ROOT, settings
-from .routers import manage, photos
+from .routers import manage, onedrive, photos
 
 
 class _Activity:
@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
 
     app.include_router(photos.router)
     app.include_router(manage.router)
+    app.include_router(onedrive.router)
 
     @app.get("/api/health")
     def health() -> dict:

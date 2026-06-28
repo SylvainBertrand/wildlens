@@ -237,6 +237,135 @@ html, body, #root {
 .nav-prev { left: 16px; }
 .nav-next { right: 16px; }
 
+/* ---- OneDrive ---- */
+.od-open-btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.od-open-btn:hover { border-color: var(--accent); }
+
+.od-modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  width: min(900px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+}
+.od-title { margin: 0 0 12px; color: var(--accent); }
+.od-error {
+  background: rgba(233, 139, 139, 0.12);
+  color: #e98b8b;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.od-connect { padding: 10px 0; }
+.od-device { padding: 8px 0; }
+.od-code {
+  font-size: 30px;
+  letter-spacing: 4px;
+  font-weight: 700;
+  color: var(--accent-2);
+  background: var(--panel-2);
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  margin: 10px 0;
+}
+.od-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+.od-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.od-crumb {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+}
+.od-sep { color: var(--muted); }
+.od-account { color: var(--muted); font-size: 12px; }
+.od-browser { overflow-y: auto; flex: 1; min-height: 120px; }
+.od-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.od-folder:hover { background: var(--line); }
+.od-count { margin-left: auto; color: var(--muted); font-size: 12px; }
+.od-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.od-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  background: var(--panel-2);
+}
+.od-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.od-cell.sel { border-color: var(--accent); }
+.od-check {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #08120b;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+.od-cell.sel .od-check { opacity: 1; }
+.od-pad { padding: 16px; }
+.od-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 10px;
+}
+.od-actions .upload-btn { margin-left: auto; }
+.od-done { color: var(--accent); font-size: 13px; margin-top: 8px; }
+
 .state {
   position: absolute;
   inset: 0;

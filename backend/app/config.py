@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # CORS origins allowed for the frontend dev server.
     cors_origins: list[str] = ["*"]
 
+    # --- OneDrive import source (optional). Empty client id => feature hidden. ---
+    onedrive_client_id: str = ""
+    # Authority tenant: "consumers" (personal MS accounts), "common", or a tenant id.
+    onedrive_tenant: str = "consumers"
+
     @property
     def photos_dir(self) -> Path:
         return self.data_dir / "photos"
@@ -64,6 +69,15 @@ class Settings(BaseSettings):
     @property
     def enrich_cache_path(self) -> Path:
         return self.cache_dir / "enrich.json"
+
+    @property
+    def onedrive_token_path(self) -> Path:
+        # Holds the OAuth refresh token — lives in gitignored data/, never the repo.
+        return self.data_dir / "onedrive_token.json"
+
+    @property
+    def onedrive_configured(self) -> bool:
+        return bool(self.onedrive_client_id)
 
 
 settings = Settings()
