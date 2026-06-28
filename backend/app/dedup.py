@@ -55,7 +55,7 @@ class _UnionFind:
 
 
 def cluster(items: list[dict], threshold: int = 10, time_window: int = 180,
-            pos_window: int = 25) -> dict[str, str]:
+            pos_window: int = 40) -> dict[str, str]:
     """Cluster near-duplicate images. Returns {photo_id: group_id} for grouped
     photos only (singletons are omitted).
 

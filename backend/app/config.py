@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     # Near-duplicate grouping (perceptual hash, ingest-time). Higher threshold =
     # looser grouping. time_window bounds grouping to photos taken close together.
     dedup_enabled: bool = True
-    dedup_threshold: int = 10      # max Hamming distance (0-64) to group
-    dedup_time_window: int = 180   # seconds
+    dedup_threshold: int = 14      # max Hamming distance (0-64) to group
+    dedup_time_window: int = 300   # seconds
 
     # Idle auto-shutdown (seconds). >0 makes the server exit after this much
     # inactivity so socket activation can keep idle CPU/RAM at zero. 0 disables
