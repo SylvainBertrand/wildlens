@@ -1,0 +1,21 @@
+[Unit]
+Description=wildlens photo-map server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+WorkingDirectory=__REPO__/backend
+EnvironmentFile=-__REPO__/.env
+# Serves both the API and the built frontend (frontend/dist) on one port.
+Environment=WILDLENS_HOST=0.0.0.0
+Environment=WILDLENS_PORT=8000
+ExecStart=__PYTHON__ -m uvicorn app.main:app --host ${WILDLENS_HOST} --port ${WILDLENS_PORT} --log-level info
+Restart=on-failure
+RestartSec=5
+KillMode=process
+TimeoutStopSec=30
+MemoryMax=1G
+
+[Install]
+WantedBy=default.target

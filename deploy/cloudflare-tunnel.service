@@ -1,0 +1,18 @@
+[Unit]
+Description=Cloudflare Tunnel for wildlens (public access)
+After=network-online.target wildlens.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+# Configure the tunnel first (see deploy/README.md "Going public"):
+#   cloudflared tunnel login
+#   cloudflared tunnel create wildlens
+#   cloudflared tunnel route dns wildlens wildlens.example.com
+# then point ~/.cloudflared/config.yml at http://localhost:8000
+ExecStart=/usr/local/bin/cloudflared tunnel run wildlens
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

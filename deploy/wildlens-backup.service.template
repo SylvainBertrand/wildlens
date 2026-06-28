@@ -1,0 +1,7 @@
+[Unit]
+Description=wildlens data backup (photos + metadata; data/ is gitignored)
+
+[Service]
+Type=oneshot
+ExecStart=__REPO__/deploy/wildlens-backup.sh
+EnvironmentFile=-__REPO__/.env
