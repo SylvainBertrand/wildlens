@@ -55,6 +55,11 @@ class Settings(BaseSettings):
         return self.cache_dir / "thumbs"
 
     @property
+    def web_dir(self) -> Path:
+        # Browser-friendly transcoded video versions (for HEVC etc.).
+        return self.cache_dir / "web"
+
+    @property
     def index_path(self) -> Path:
         return self.cache_dir / "index.json"
 

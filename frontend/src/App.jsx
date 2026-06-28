@@ -18,6 +18,7 @@ export default function App() {
   const [ingesting, setIngesting] = useState(false)
   const [odConfigured, setOdConfigured] = useState(false)
   const [showOneDrive, setShowOneDrive] = useState(false)
+  const [hiddenTrips, setHiddenTrips] = useState(() => new Set())
   const pollRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -57,12 +58,29 @@ export default function App() {
 
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), [])
 
-  const grouped = useMemo(() => groupByTripAndDay(data.photos), [data.photos])
+  // Trip visibility (applies to map + gallery; the tree always lists all trips).
+  const visiblePhotos = useMemo(
+    () => data.photos.filter((p) => !hiddenTrips.has(p.trip)),
+    [data.photos, hiddenTrips]
+  )
+  const toggleTrip = useCallback((name) => {
+    setHiddenTrips((prev) => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
+  }, [])
+  const showOnlyTrip = useCallback(
+    (name) => setHiddenTrips(new Set(data.trips.map((t) => t.name).filter((n) => n !== name))),
+    [data.trips]
+  )
+
+  const grouped = useMemo(() => groupByTripAndDay(visiblePhotos), [visiblePhotos])
   const navOrder = useMemo(() => {
     if (view === 'gallery') return grouped.order
-    const located = new Set(data.photos.filter((p) => p.location).map((p) => p.id))
+    const located = new Set(visiblePhotos.filter((p) => p.location).map((p) => p.id))
     return grouped.order.filter((id) => located.has(id))
-  }, [view, grouped.order, data.photos])
+  }, [view, grouped.order, visiblePhotos])
 
   const byId = useMemo(() => new Map(data.photos.map((p) => [p.id, p])), [data.photos])
   const selected = selectedId ? byId.get(selectedId) : null
@@ -101,7 +119,7 @@ export default function App() {
 
       {ingesting && <div className="ingest-banner">Processing new photos…</div>}
 
-      <div className={`content ${view}`}>
+      <div className="content">
         {loading && <div className="state">Loading photos…</div>}
         {error && (
           <div className="state error">
@@ -116,23 +134,27 @@ export default function App() {
           </div>
         )}
 
-        {!loading && !error && data.photos.length > 0 && view === 'map' && (
+        {!loading && !error && data.photos.length > 0 && (
           <div className="map-layout">
             <Sidebar
-              trips={data.trips}
               photos={data.photos}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              hiddenTrips={hiddenTrips}
+              onToggleTrip={toggleTrip}
+              onShowOnlyTrip={showOnlyTrip}
               providerName={providerName}
             />
             <main className="main">
-              <MapView photos={data.photos} onSelect={setSelectedId} />
+              {visiblePhotos.length === 0 ? (
+                <div className="state">All trips hidden — enable one in the sidebar.</div>
+              ) : view === 'map' ? (
+                <MapView photos={visiblePhotos} onSelect={setSelectedId} />
+              ) : (
+                <Gallery photos={visiblePhotos} onSelect={setSelectedId} />
+              )}
             </main>
           </div>
-        )}
-
-        {!loading && !error && data.photos.length > 0 && view === 'gallery' && (
-          <Gallery photos={data.photos} onSelect={setSelectedId} />
         )}
       </div>
 

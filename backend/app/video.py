@@ -16,6 +16,12 @@ from pathlib import Path
 
 _ISO6709 = re.compile(r"([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)")
 
+# Codecs/containers browsers can play natively. Anything else (notably HEVC/H.265
+# from phone "high quality" modes) is transcoded to H.264 for web playback.
+WEB_VIDEO_CODECS = {"h264", "vp8", "vp9", "av1"}
+WEB_AUDIO_CODECS = {"aac", "mp3", "opus", "vorbis"}
+WEB_CONTAINERS = {".mp4", ".m4v", ".mov", ".webm"}
+
 
 def _resolve(name: str) -> str | None:
     found = shutil.which(name)
@@ -69,7 +75,7 @@ def _parse_creation_time(value: str) -> str | None:
 def read_metadata(path) -> dict:
     """Return {gps, taken_at, duration, width, height} for a video via ffprobe."""
     out: dict = {"gps": None, "taken_at": None, "duration": None,
-                 "width": None, "height": None}
+                 "width": None, "height": None, "vcodec": None, "acodec": None}
     probe = ffprobe_bin()
     if not probe:
         return out
@@ -106,15 +112,67 @@ def read_metadata(path) -> dict:
                 break
 
     for stream in data.get("streams", []):
-        if stream.get("codec_type") == "video":
+        if stream.get("codec_type") == "video" and out["vcodec"] is None:
             out["width"] = stream.get("width")
             out["height"] = stream.get("height")
+            out["vcodec"] = (stream.get("codec_name") or "").lower() or None
             if not out["taken_at"]:
                 stags = {k.lower(): v for k, v in (stream.get("tags") or {}).items()}
                 if "creation_time" in stags:
                     out["taken_at"] = _parse_creation_time(stags["creation_time"])
-            break
+        elif stream.get("codec_type") == "audio" and out["acodec"] is None:
+            out["acodec"] = (stream.get("codec_name") or "").lower() or None
     return out
+
+
+def needs_web_version(path, meta: dict) -> bool:
+    """True if the browser likely can't play this file as-is (codec/container)."""
+    ext = Path(path).suffix.lower()
+    vcodec = meta.get("vcodec")
+    acodec = meta.get("acodec")
+    if ext not in WEB_CONTAINERS:
+        return True
+    if vcodec and vcodec not in WEB_VIDEO_CODECS:
+        return True
+    if acodec and acodec not in WEB_AUDIO_CODECS:
+        return True
+    # If ffprobe gave us no codec info, be safe and don't transcode (play original).
+    return False
+
+
+def make_web_version(src, dest, max_edge: int = 1280) -> bool:
+    """Transcode to a browser-friendly H.264/AAC MP4 (faststart). Returns success.
+
+    Scaled so the longest edge is <= max_edge to bound size/CPU for in-app
+    playback. Runs at ingest time only.
+    """
+    ff = ffmpeg_bin()
+    if not ff:
+        return False
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # Scale down only if larger than max_edge; keep aspect; ensure even dims.
+    vf = (f"scale='if(gt(iw,ih),min({max_edge},iw),-2)':"
+          f"'if(gt(iw,ih),-2,min({max_edge},ih))'")
+    tmp = dest.with_suffix(".tmp.mp4")
+    try:
+        proc = subprocess.run(
+            [ff, "-y", "-i", str(src),
+             "-vf", vf,
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+             "-c:a", "aac", "-b:a", "128k",
+             "-movflags", "+faststart",
+             str(tmp)],
+            capture_output=True, timeout=3600,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        tmp.unlink(missing_ok=True)
+        return False
+    if proc.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
+        tmp.replace(dest)
+        return True
+    tmp.unlink(missing_ok=True)
+    return False
 
 
 def make_poster(src, dest, size: int) -> bool:

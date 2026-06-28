@@ -166,6 +166,8 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
             clearInterval(pollRef.current)
             clearSelection()
             onImported?.()
+            // Auto-close shortly after a successful import.
+            if (st.state === 'done') setTimeout(() => onClose(), 1500)
           }
         } catch {
           /* keep polling */

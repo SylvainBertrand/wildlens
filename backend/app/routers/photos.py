@@ -46,9 +46,23 @@ def get_photo(photo_id: str) -> Photo:
 
 @router.get("/photos/{photo_id}/image")
 def get_image(photo_id: str):
+    # For videos with a transcoded browser-friendly version, serve that so the
+    # browser can actually decode it (e.g. HEVC -> H.264).
+    web = settings.web_dir / f"{photo_id}.mp4"
+    if web.exists():
+        return FileResponse(web, media_type="video/mp4")
     src = _load_paths().get(photo_id)
     if not src or not Path(src).exists():
         raise HTTPException(status_code=404, detail="Image file not found")
+    return FileResponse(src)
+
+
+@router.get("/photos/{photo_id}/original")
+def get_original(photo_id: str):
+    """Always serve the untouched original (for download)."""
+    src = _load_paths().get(photo_id)
+    if not src or not Path(src).exists():
+        raise HTTPException(status_code=404, detail="Original not found")
     return FileResponse(src)
 
 

@@ -202,6 +202,22 @@ def build_index(force: bool = False) -> PhotosResponse:
             except Exception as exc:  # noqa: BLE001
                 print(f"  ! thumbnail failed for {rel}: {exc}")
 
+        # Videos in non-web codecs (e.g. HEVC) get a browser-friendly H.264
+        # version so they actually play in the lightbox.
+        if media_type == "video":
+            from . import video
+            web_path = settings.web_dir / f"{pid}.mp4"
+            if video.needs_web_version(path, meta):
+                if not _thumb_is_fresh(path, web_path):
+                    print(f"  ~ transcoding {rel} for web playback (codec={meta.get('vcodec')})")
+                    try:
+                        if not video.make_web_version(path, web_path):
+                            print(f"  ! transcode failed for {rel}")
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"  ! transcode error for {rel}: {exc}")
+            else:
+                web_path.unlink(missing_ok=True)
+
         # Incremental: reuse cached enrichment when the signature matches.
         sig = _signature(path)
         cached = enrich_cache.get(pid)
