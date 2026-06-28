@@ -35,6 +35,18 @@ def test_connect_requires_configuration(monkeypatch):
 
 
 @pytest.mark.unit
+def test_status_configured_not_connected(monkeypatch, tmp_path):
+    # Configured but no token file -> resolves the source module and reports
+    # not-connected (regression guard for the router/source import collision).
+    monkeypatch.setattr(settings, "onedrive_client_id", "test-client-id")
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    client = TestClient(create_app())
+    r = client.get("/api/sources/onedrive/status")
+    assert r.status_code == 200
+    assert r.json() == {"configured": True, "connected": False, "account": None}
+
+
+@pytest.mark.unit
 def test_is_connected_reads_token_file(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "data_dir", tmp_path)
     assert onedrive.is_connected() is False

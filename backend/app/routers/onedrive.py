@@ -27,7 +27,7 @@ _lock = threading.Lock()
 
 def _od():
     """Lazy import keeps the base server free of the source module."""
-    from . import onedrive
+    from ..sources import onedrive
     return onedrive
 
 
