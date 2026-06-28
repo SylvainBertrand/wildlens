@@ -1,6 +1,7 @@
 import { thumbUrl } from '../api'
 
 const KIND_EMOJI = {
+  place: '\u{1F4CD}',
   fauna: '\u{1F43E}',
   flora: '\u{1F33F}',
   landmark: '\u{1F3DE}\uFE0F',
@@ -34,7 +35,7 @@ export default function Sidebar({ trips, photos, selectedId, onSelect, providerN
           >
             <img src={thumbUrl(p)} alt={p.filename} />
             <div className="photo-list-meta">
-              <strong>{p.filename}</strong>
+              <strong>{p.place_name || p.filename}</strong>
               <span>
                 {p.identification?.subjects
                   ?.map((s) => `${KIND_EMOJI[s.kind] || ''} ${s.label}`)

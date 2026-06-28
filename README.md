@@ -9,31 +9,41 @@ first (e.g. on a home server), and go public later.
 > never committed**. Everything under `data/` is gitignored — it lives only on
 > the machine running wildlens.
 
-## Features (phase 1)
+## Features
 
 - 📍 **Map view** — photos placed by GPS (EXIF) as thumbnail pins (Leaflet + OpenStreetMap, no API key)
 - 🗂️ **Trips** — organize photos as `data/photos/<trip>/...`, reused across vacations
-- 🔎 **Identification (pluggable)** — landmarks / flora / fauna + fun facts.
-  Ships with a **mock** provider; real AI providers drop in later without touching the app.
-- 🖼️ **Detail view** — full photo, capture time, coordinates, and fun facts
+- 🏞️ **Real place names & fun facts (no API keys)** — reverse-geocoding via
+  OpenStreetMap **Nominatim** + the nearest notable **Wikipedia** landmark with a
+  real summary and a "read more" link
+- 🔎 **Pluggable image identification** — `none` (default, place + facts only),
+  `mock` (demo subjects), or `claude` (real flora/fauna/landmark ID via your
+  Claude CLI subscription — no separate key). New providers drop in without
+  touching the API.
+- 🪶 **Lightweight when idle** — all heavy work runs at ingest time; the runtime
+  server is tiny and (under systemd) socket-activates and **exits when idle**, so
+  it uses near-zero CPU/RAM when nobody's browsing
+- 🖼️ **Detail view** — full photo, place, capture time, coordinates, fun facts
 
 ## Tech stack
 
-- **Backend:** Python + FastAPI (EXIF/GPS extraction, thumbnails, JSON index, REST API)
+- **Backend:** Python + FastAPI (EXIF/GPS extraction, thumbnails, enrichment, JSON index, REST API)
 - **Frontend:** React (Vite) + react-leaflet
-- **Map tiles:** OpenStreetMap (no key)
+- **Map tiles:** OpenStreetMap · **Geocoding:** Nominatim · **Facts:** Wikipedia (all key-free)
 
 ## Layout
 
 ```
 backend/        FastAPI app + photo ingest pipeline
   app/
-    ingest.py            scan photos -> EXIF/GPS + thumbnails -> data/cache/index.json
-    identification/      pluggable providers (mock today)
-    routers/photos.py    REST API + image/thumbnail serving
+    ingest.py            scan photos -> EXIF/GPS + thumbnails -> enrich -> data/cache/index.json
+    enrich/              ingest-time geocoding (Nominatim) + facts (Wikipedia); cached
+    identification/      pluggable providers (none / mock / claude)
+    routers/photos.py    REST API + image/thumbnail serving (lightweight runtime)
 frontend/       Vite + React + Leaflet map UI
+deploy/         systemd units (socket activation + idle exit), backup, install.sh
 scripts/        seed_sample.py (demo photos with fake GPS)
-data/           GITIGNORED: photos/<trip>/ + cache/ (thumbnails, index)
+data/           GITIGNORED: photos/<trip>/ + cache/ (thumbnails, index, geo/facts caches)
 ```
 
 ## Quick start (development)
@@ -95,8 +105,9 @@ bash deploy/install.sh                                  # installs + starts the 
 ```
 
 Configuration is via environment variables or a `.env` file (see `.env.example`):
-`WILDLENS_HOST`, `WILDLENS_PORT`, `WILDLENS_ID_PROVIDER`, `WILDLENS_THUMB_SIZE`,
-plus backup settings (`WILDLENS_BACKUP_DIR`, `RESTIC_REPOSITORY`, ...).
+`WILDLENS_PORT`, `WILDLENS_IDLE_TIMEOUT`, `WILDLENS_ID_PROVIDER` (`none`/`mock`/`claude`),
+`WILDLENS_GEOCODE_ENABLED`, `WILDLENS_FACTS_ENABLED`, `WILDLENS_THUMB_SIZE`, plus
+backup settings (`WILDLENS_BACKUP_DIR`, `RESTIC_REPOSITORY`, ...).
 
 > **Backups:** because `data/` is gitignored, your photos are **not** in GitHub.
 > The deploy installs a daily backup timer for `data/` — see `deploy/README.md`.
@@ -106,13 +117,15 @@ plus backup settings (`WILDLENS_BACKUP_DIR`, `RESTIC_REPOSITORY`, ...).
 
 ## Roadmap
 
-- **Phase 1 (done):** map + photo pipeline + mock identification + privacy-safe data handling
-- **Phase 2:** real identification providers
-  - reverse geocoding (OpenStreetMap Nominatim) for place names — no key
-  - Wikipedia REST API for fun facts — no key
-  - local CLIP model for offline species/landmark guesses — no key
-  - optional: Claude CLI provider (uses an existing subscription)
-- **Phase 3:** public hosting (reverse proxy + TLS + auth), photo upload UI, clustering
+- **Phase 1 (done):** map + photo pipeline + pluggable identification + privacy-safe data handling
+- **Phase 2 (done):** real, key-free enrichment + lightweight runtime
+  - reverse geocoding (OpenStreetMap Nominatim) for place names
+  - nearest-landmark fun facts via Wikipedia geosearch (with "read more" links)
+  - optional Claude CLI provider for real flora/fauna/landmark ID (uses an existing subscription)
+  - socket activation + idle auto-shutdown for near-zero idle CPU/RAM
+  - incremental ingest (skip unchanged photos; cached geocode/facts lookups)
+- **Phase 3 (next):** public hosting (Cloudflare Tunnel + auth), photo upload UI,
+  marker clustering, optional local CLIP provider for fully-offline vision
 
 ## License
 

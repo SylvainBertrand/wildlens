@@ -17,8 +17,19 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
-    # Identification provider key: "mock" for now. Later: "clip", "claude", "wikipedia"...
-    id_provider: str = "mock"
+    # Identification provider key. "none" (default): no image-based ID, but
+    # photos still get place names + Wikipedia facts via the ingest pipeline.
+    # "mock": demo subjects. "claude": real vision via the Claude CLI (opt-in).
+    id_provider: str = "none"
+
+    # Ingest-time enrichment (network, cached). Disable for fully offline ingest.
+    geocode_enabled: bool = True   # GPS -> place name (Nominatim)
+    facts_enabled: bool = True     # place/subject -> fun fact (Wikipedia)
+
+    # Idle auto-shutdown (seconds). >0 makes the server exit after this much
+    # inactivity so socket activation can keep idle CPU/RAM at zero. 0 disables
+    # (always-on). Intended to be set by the socket-activated systemd unit.
+    idle_timeout: int = 0
 
     # Thumbnail max edge in px.
     thumb_size: int = 480
@@ -41,6 +52,18 @@ class Settings(BaseSettings):
     @property
     def index_path(self) -> Path:
         return self.cache_dir / "index.json"
+
+    @property
+    def geocode_cache_path(self) -> Path:
+        return self.cache_dir / "geocode.json"
+
+    @property
+    def facts_cache_path(self) -> Path:
+        return self.cache_dir / "facts.json"
+
+    @property
+    def enrich_cache_path(self) -> Path:
+        return self.cache_dir / "enrich.json"
 
 
 settings = Settings()

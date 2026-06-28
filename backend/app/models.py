@@ -10,12 +10,13 @@ class GeoPoint(BaseModel):
 
 
 class IdentifiedSubject(BaseModel):
-    """A thing recognized in a photo (landmark, animal, plant...)."""
-    kind: str            # "landmark" | "fauna" | "flora" | "scene" | "unknown"
+    """A thing recognized in a photo (place, landmark, animal, plant...)."""
+    kind: str            # "place" | "landmark" | "fauna" | "flora" | "scene" | "unknown"
     label: str           # human-readable name
     confidence: float    # 0..1
     fun_fact: str | None = None
     source: str | None = None   # which provider / dataset produced this
+    url: str | None = None      # "read more" link (e.g. Wikipedia)
 
 
 class Identification(BaseModel):
@@ -32,6 +33,7 @@ class Photo(BaseModel):
     taken_at: str | None = None       # ISO 8601 if known
     location: GeoPoint | None = None
     place_name: str | None = None
+    place_detail: str | None = None   # e.g. "Teton County, Wyoming"
     width: int | None = None
     height: int | None = None
     identification: Identification | None = None

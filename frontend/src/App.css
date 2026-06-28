@@ -181,8 +181,18 @@ html, body, #root {
 }
 .detail-body { padding: 18px 20px; overflow-y: auto; }
 .detail-body h2 { margin: 0 0 2px; }
+.detail-place { margin: 0 0 4px; color: var(--text); font-size: 14px; opacity: 0.85; }
 .detail-sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
 .muted { color: var(--muted); }
+
+.subject-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.subject-link:hover { text-decoration: underline; }
 
 .subject {
   background: var(--panel-2);

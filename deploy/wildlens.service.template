@@ -1,18 +1,21 @@
 [Unit]
-Description=wildlens photo-map server
-After=network-online.target
+Description=wildlens photo-map server (socket-activated, idle-exiting)
+Requires=wildlens.socket
+After=wildlens.socket network-online.target
 Wants=network-online.target
 
 [Service]
 Type=exec
 WorkingDirectory=__REPO__/backend
 EnvironmentFile=-__REPO__/.env
-# Serves both the API and the built frontend (frontend/dist) on one port.
-Environment=WILDLENS_HOST=0.0.0.0
-Environment=WILDLENS_PORT=8000
-ExecStart=__PYTHON__ -m uvicorn app.main:app --host ${WILDLENS_HOST} --port ${WILDLENS_PORT} --log-level info
+# Idle auto-shutdown: exit after 10 min of no requests. systemd keeps the socket
+# listening and restarts the service on the next request — so idle CPU/RAM is ~0.
+Environment=WILDLENS_IDLE_TIMEOUT=600
+# `python -m app.main` detects the systemd-passed socket (LISTEN_FDS) and binds
+# uvicorn to fd 3, so restarts never drop connections.
+ExecStart=__PYTHON__ -m app.main
 Restart=on-failure
-RestartSec=5
+RestartSec=2
 KillMode=process
 TimeoutStopSec=30
 MemoryMax=1G

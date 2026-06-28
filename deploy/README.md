@@ -1,23 +1,43 @@
 # Deployment — wildlens on a LAN host (e.g. `shumai`)
 
-wildlens runs as a **systemd user service**: it starts on boot, restarts on
-failure, health-checks itself, and backs up your photos daily. One process
-serves both the API and the built frontend.
+wildlens runs as a **socket-activated systemd user service** tuned to be very
+light when idle: the server process **starts on the first request and exits after
+~10 minutes of inactivity**, while systemd keeps the socket listening and
+restarts it instantly on the next request. So when nobody's browsing, wildlens
+uses **near-zero CPU/RAM**. One process serves both the API and the built frontend.
 
 Patterns here are adapted (proportionately) from the `trading_company` project's
 systemd-based deployment.
+
+## How "lightweight when idle" works
+
+1. `wildlens.socket` owns the listening port (`:8000`) and is always enabled.
+2. On the first connection, systemd starts `wildlens.service`, which binds
+   uvicorn to the inherited socket (fd 3).
+3. The app tracks request activity; after `WILDLENS_IDLE_TIMEOUT` seconds (600 by
+   default, set in the unit) with no requests, it exits cleanly.
+4. The socket stays open, so the next visit transparently restarts the service.
+
+All heavy work (geocoding, Wikipedia, any vision) happens during `ingest`, never
+in the request path — so even while serving, the process stays small.
 
 ## Units
 
 | Unit | Purpose |
 |------|---------|
-| `wildlens.service` | API + UI server on `:8000` (auto-restart, starts on boot) |
-| `wildlens-watchdog.timer` → `.service` | Curl `/api/health` every 2 min; restart if unhealthy |
+| `wildlens.socket` | Always-listening socket on `:8000` (enabled) |
+| `wildlens.service` | API + UI server; socket-activated, **exits when idle** |
 | `wildlens-backup.timer` → `.service` | Daily backup of the **gitignored** `data/` dir at 02:30 |
+| `wildlens-watchdog.timer` → `.service` | Health check + restart — for **always-on** mode only (installed, not enabled) |
 | `cloudflare-tunnel.service` | Public access (installed, **not enabled** by default) |
 
 > `.service.template` files contain `__REPO__` / `__PYTHON__` placeholders that
 > `install.sh` fills in for wherever you cloned the repo.
+
+> **Always-on instead?** Set `WILDLENS_IDLE_TIMEOUT=0` in `.env` and enable the
+> service + watchdog directly:
+> `systemctl --user enable --now wildlens.service wildlens-watchdog.timer`.
+> (Don't run the watchdog in idle mode — its health pings would prevent idle exit.)
 
 ## First-time setup on shumai
 

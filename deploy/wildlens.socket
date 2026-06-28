@@ -1,0 +1,11 @@
+[Unit]
+Description=wildlens listening socket
+
+[Socket]
+# The socket stays open even when the service is stopped, so wildlens can shut
+# down when idle and be restarted instantly on the next request (zero idle cost).
+# Change the port here if you override WILDLENS_PORT.
+ListenStream=0.0.0.0:8000
+
+[Install]
+WantedBy=sockets.target

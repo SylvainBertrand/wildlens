@@ -1,7 +1,20 @@
-"""wildlens FastAPI application factory."""
+"""wildlens FastAPI application factory.
+
+The runtime server is intentionally minimal: it only reads the precomputed index
+and serves files. No Pillow / network / ML is imported here, so idle memory is
+small. Combined with systemd socket activation + idle auto-shutdown (see
+WILDLENS_IDLE_TIMEOUT and deploy/), the process uses ~zero CPU/RAM when unused.
+"""
 from __future__ import annotations
 
-from fastapi import FastAPI
+import asyncio
+import contextlib
+import os
+import signal
+import time
+from collections.abc import AsyncIterator
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -9,13 +22,53 @@ from .config import REPO_ROOT, settings
 from .routers import photos
 
 
-def create_app() -> FastAPI:
-    """Build and configure the FastAPI app.
+class _Activity:
+    """Tracks the time of the last request for idle auto-shutdown."""
 
-    Factory pattern (mirrors trading_company's src/app.py) so tests and
-    socket-activated servers can construct fresh instances cleanly.
+    def __init__(self) -> None:
+        self.last = time.monotonic()
+
+    def touch(self) -> None:
+        self.last = time.monotonic()
+
+
+async def _idle_watchdog(activity: _Activity, timeout: int) -> None:
+    """Exit the process after `timeout` seconds of inactivity.
+
+    Under systemd socket activation the socket stays listening, so the next
+    request transparently restarts the service. This is what keeps idle
+    CPU/RAM at zero without dropping requests.
     """
-    app = FastAPI(title="wildlens", version="0.1.0")
+    check = max(5, min(timeout, 30))
+    try:
+        while True:
+            await asyncio.sleep(check)
+            if time.monotonic() - activity.last >= timeout:
+                # Graceful shutdown: uvicorn handles SIGTERM cleanly.
+                signal.raise_signal(signal.SIGTERM)
+                return
+    except asyncio.CancelledError:
+        pass
+
+
+def create_app() -> FastAPI:
+    activity = _Activity()
+    idle_timeout = settings.idle_timeout
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        task = None
+        if idle_timeout and idle_timeout > 0:
+            task = asyncio.create_task(_idle_watchdog(activity, idle_timeout))
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+    app = FastAPI(title="wildlens", version="0.2.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -24,14 +77,24 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    if idle_timeout and idle_timeout > 0:
+        @app.middleware("http")
+        async def _track_activity(request: Request, call_next):
+            activity.touch()
+            return await call_next(request)
+
     app.include_router(photos.router)
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"status": "ok", "id_provider": settings.id_provider}
+        return {
+            "status": "ok",
+            "id_provider": settings.id_provider,
+            "idle_timeout": idle_timeout,
+        }
 
-    # In production (e.g. on shumai), serve the built frontend from the same
-    # origin so one process serves both API and UI. Build: cd frontend && npm run build
+    # In production, serve the built frontend from the same origin so one process
+    # serves both API and UI. Build: cd frontend && npm run build
     dist = REPO_ROOT / "frontend" / "dist"
     if dist.is_dir():
         app.mount("/", StaticFiles(directory=str(dist), html=True), name="frontend")
@@ -39,13 +102,18 @@ def create_app() -> FastAPI:
     return app
 
 
-# Module-level app for `uvicorn app.main:app`.
 app = create_app()
 
 
 def run() -> None:
     import uvicorn
-    uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)
+
+    # Socket activation: if systemd passed a listening socket (LISTEN_FDS), bind
+    # to fd 3 instead of host/port so restarts never drop connections.
+    if os.environ.get("LISTEN_FDS"):
+        uvicorn.run("app.main:app", fd=3, log_level="info")
+    else:
+        uvicorn.run("app.main:app", host=settings.host, port=settings.port, log_level="info")
 
 
 if __name__ == "__main__":
