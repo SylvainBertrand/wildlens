@@ -46,6 +46,9 @@ def extract_gps(exif) -> tuple[float, float] | None:
         lat_d = -lat_d
     if str(lon_ref).upper().startswith("W"):
         lon_d = -lon_d
+    # (0, 0) "Null Island" is a sentinel for an unset/unlocked GPS fix.
+    if abs(lat_d) < 1e-4 and abs(lon_d) < 1e-4:
+        return None
     return (lat_d, lon_d)
 
 

@@ -47,9 +47,13 @@ def _parse_iso6709(value: str) -> tuple[float, float] | None:
     if not m:
         return None
     try:
-        return float(m.group(1)), float(m.group(2))
+        lat, lon = float(m.group(1)), float(m.group(2))
     except ValueError:
         return None
+    # (0, 0) "Null Island" is the sentinel phones write when GPS isn't locked.
+    if abs(lat) < 1e-4 and abs(lon) < 1e-4:
+        return None
+    return lat, lon
 
 
 def _parse_creation_time(value: str) -> str | None:

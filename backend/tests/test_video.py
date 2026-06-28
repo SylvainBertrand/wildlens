@@ -54,3 +54,9 @@ def test_stream_rotation():
     assert _stream_rotation({"side_data_list": [{"rotation": -90}]}) == -90
     assert _stream_rotation({"tags": {"rotate": "270"}}) == 270
     assert _stream_rotation({}) == 0
+
+
+@pytest.mark.unit
+def test_parse_iso6709_null_island():
+    # (0,0) is a sentinel for "no GPS lock" and must be rejected.
+    assert _parse_iso6709("+00.0000+000.0000/") is None
