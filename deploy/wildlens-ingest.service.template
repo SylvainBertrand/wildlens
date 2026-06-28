@@ -1,0 +1,16 @@
+[Unit]
+Description=wildlens photo ingest (one-shot, single-flight worker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__REPO__/backend
+EnvironmentFile=-__REPO__/.env
+# --worker coalesces concurrent triggers and holds an exclusive lock, so it's
+# safe to start this repeatedly (folder-drop .path unit, API trigger, manual).
+ExecStart=__PYTHON__ -m app.ingest --worker
+# Heavy work (Pillow + geocoding) is confined to this transient unit, never the
+# always-reachable web server.
+MemoryMax=2G
+Nice=10

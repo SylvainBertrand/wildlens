@@ -50,6 +50,8 @@ render wildlens-backup.service
 copy   wildlens-backup.timer
 render wildlens-watchdog.service       # installed for always-on mode, not enabled
 copy   wildlens-watchdog.timer
+render wildlens-ingest.service         # oneshot worker (triggered, not boot-enabled)
+render wildlens-ingest.path            # folder-drop auto-ingest watcher
 copy   cloudflare-tunnel.service
 
 systemctl --user daemon-reload
@@ -62,10 +64,14 @@ loginctl enable-linger "$(whoami)" >/dev/null 2>&1 || \
 # the first request and exits when idle.
 systemctl --user enable --now wildlens.socket
 systemctl --user enable --now wildlens-backup.timer
+# Folder-drop auto-ingest: watch data/photos for new trip folders.
+systemctl --user enable --now wildlens-ingest.path
 
 echo ""
 echo "==> Done. wildlens is socket-activated and idle-exiting."
 echo "    It starts on first request and stops after ~10 min idle (near-zero idle cost)."
+echo "    Drop a trip folder into data/photos/ and it auto-ingests; or use the"
+echo "    in-app upload, or:  systemctl --user start wildlens-ingest.service"
 echo "    Status:  systemctl --user status wildlens.socket wildlens.service"
 echo "    Logs:    journalctl --user -u wildlens.service -f"
 echo "    URL:     http://$(hostname -s):8000/"

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import 'leaflet.markercluster'
 import { thumbUrl } from '../api'
 
 // Default Leaflet marker icons don't resolve under bundlers; build a small
@@ -11,20 +12,46 @@ function photoIcon(photo) {
     html: `<div class="photo-pin-inner"><img src="${thumbUrl(photo)}" alt="" /></div>`,
     iconSize: [54, 54],
     iconAnchor: [27, 27],
-    popupAnchor: [0, -28],
   })
 }
 
-function FitBounds({ photos }) {
+// Imperatively manage a marker-cluster layer (the markercluster plugin isn't a
+// React component, so we drive it directly and keep React out of the markers).
+function ClusterLayer({ photos, onSelect }) {
   const map = useMap()
+
   useEffect(() => {
-    const pts = photos.filter((p) => p.location).map((p) => [p.location.lat, p.location.lon])
-    if (pts.length === 1) {
-      map.setView(pts[0], 11)
-    } else if (pts.length > 1) {
-      map.fitBounds(pts, { padding: [50, 50] })
+    const located = photos.filter((p) => p.location)
+    const group = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+    })
+
+    for (const p of located) {
+      const marker = L.marker([p.location.lat, p.location.lon], { icon: photoIcon(p) })
+      marker.on('click', () => onSelect(p.id))
+      const facts = p.identification?.subjects?.map((s) => s.label).join(' \u00b7 ') || ''
+      marker.bindTooltip(
+        `<strong>${p.place_name || p.filename}</strong>${facts ? `<br/>${facts}` : ''}`,
+        { direction: 'top', offset: [0, -28] }
+      )
+      group.addLayer(marker)
     }
-  }, [photos, map])
+
+    map.addLayer(group)
+
+    if (located.length === 1) {
+      map.setView([located[0].location.lat, located[0].location.lon], 12)
+    } else if (located.length > 1) {
+      map.fitBounds(group.getBounds(), { padding: [60, 60] })
+    }
+
+    return () => {
+      map.removeLayer(group)
+    }
+  }, [photos, map, onSelect])
+
   return null
 }
 
@@ -40,27 +67,7 @@ export default function MapView({ photos, onSelect }) {
         attribution='&copy; OpenStreetMap contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <FitBounds photos={located} />
-      {located.map((p) => (
-        <Marker
-          key={p.id}
-          position={[p.location.lat, p.location.lon]}
-          icon={photoIcon(p)}
-          eventHandlers={{ click: () => onSelect(p.id) }}
-        >
-          <Popup>
-            <div className="popup">
-              <img src={thumbUrl(p)} alt={p.filename} />
-              <strong>{p.place_name || p.filename}</strong>
-              {p.identification?.subjects?.[0] && (
-                <span className="popup-id">
-                  {p.identification.subjects.map((s) => s.label).join(' \u00b7 ')}
-                </span>
-              )}
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      <ClusterLayer photos={photos} onSelect={onSelect} />
     </MapContainer>
   )
 }

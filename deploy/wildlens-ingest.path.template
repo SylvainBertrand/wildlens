@@ -1,0 +1,13 @@
+[Unit]
+Description=wildlens folder-drop watcher (auto-ingest on new photos)
+
+[Path]
+# inotify-based (event-driven, no polling -> zero idle cost). When the photos
+# tree changes (e.g. you scp/Samba a trip folder in), start the ingest worker.
+PathModified=__REPO__/data/photos
+PathChanged=__REPO__/data/photos
+# Debounce: don't fire more than once every few seconds during a big copy.
+TriggerLimitIntervalSec=5s
+
+[Install]
+WantedBy=default.target

@@ -243,6 +243,13 @@ def build_index(force: bool = False) -> PhotosResponse:
 
 
 if __name__ == "__main__":
+    if "--worker" in sys.argv:
+        # Single-flight worker mode (used by the API trigger + systemd units).
+        from .ingest_runner import run_worker
+        passes = run_worker()
+        print(f"ingest worker: {passes} pass(es)")
+        sys.exit(0)
+
     force = "--force" in sys.argv
     print(f"Ingesting photos from {settings.photos_dir} "
           f"(provider={settings.id_provider}, geocode={settings.geocode_enabled}, "

@@ -11,7 +11,13 @@ first (e.g. on a home server), and go public later.
 
 ## Features
 
-- 📍 **Map view** — photos placed by GPS (EXIF) as thumbnail pins (Leaflet + OpenStreetMap, no API key)
+- 📍 **Map view** — photos placed by GPS (EXIF) as thumbnail pins with **marker
+  clustering** (Leaflet + OpenStreetMap, no API key)
+- ▦ **Gallery view** — responsive grid grouped by **trip → day**, lazy-loaded,
+  with a keyboard-navigable lightbox (← → to move, Esc to close)
+- ⬆️ **Add photos two ways** — drag-free **web upload** (pick/name a trip) or
+  **bulk folder drop** into `data/photos/<trip>/` (auto-ingested via a systemd
+  inotify watcher). Ingestion is single-flight + coalesced.
 - 🗂️ **Trips** — organize photos as `data/photos/<trip>/...`, reused across vacations
 - 🏞️ **Real place names & fun facts (no API keys)** — reverse-geocoding via
   OpenStreetMap **Nominatim** + the nearest notable **Wikipedia** landmark with a

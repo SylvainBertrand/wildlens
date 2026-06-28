@@ -12,11 +12,6 @@ const KIND_EMOJI = {
 export default function Sidebar({ trips, photos, selectedId, onSelect, providerName }) {
   return (
     <aside className="sidebar">
-      <header className="brand">
-        <h1>wildlens</h1>
-        <p className="tagline">your trips on a map</p>
-      </header>
-
       {trips.map((t) => (
         <div key={t.name} className="trip-block">
           <h2>{t.name}</h2>

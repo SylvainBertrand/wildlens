@@ -27,6 +27,8 @@ in the request path — so even while serving, the process stays small.
 |------|---------|
 | `wildlens.socket` | Always-listening socket on `:8000` (enabled) |
 | `wildlens.service` | API + UI server; socket-activated, **exits when idle** |
+| `wildlens-ingest.service` | One-shot ingest worker (single-flight); triggered, not boot-enabled |
+| `wildlens-ingest.path` | inotify watcher on `data/photos/` → auto-ingest on folder drop |
 | `wildlens-backup.timer` → `.service` | Daily backup of the **gitignored** `data/` dir at 02:30 |
 | `wildlens-watchdog.timer` → `.service` | Health check + restart — for **always-on** mode only (installed, not enabled) |
 | `cloudflare-tunnel.service` | Public access (installed, **not enabled** by default) |
@@ -62,22 +64,37 @@ bash deploy/install.sh
 
 Open `http://shumai:8000/` from any device on the LAN.
 
+## Adding photos (two ways)
+
+1. **Web upload** — in the app, pick/name a trip and click *Upload photos*. Files
+   are saved under `data/photos/<trip>/` and ingest runs automatically.
+2. **Folder drop (bulk)** — copy a whole trip folder into `data/photos/` (scp,
+   rsync, Samba, etc.). The `wildlens-ingest.path` unit notices and auto-ingests.
+
+   > Caveat: systemd `.path` watches are **non-recursive**. Dropping a *new*
+   > `data/photos/<trip>/` folder triggers reliably; adding files *into an
+   > existing* trip folder may not. In that case nudge it with either:
+   > `systemctl --user start wildlens-ingest.service`  (or the in-app upload).
+
+Ingestion is single-flight and coalesced (a lock + pending marker), so concurrent
+uploads and folder drops can't run two ingests at once.
+
 ## Day-to-day operations
 
 ```bash
 # Status / logs
 systemctl --user status wildlens.service
 journalctl --user -u wildlens.service -f
+journalctl --user -u wildlens-ingest.service -f   # ingestion runs
 
-# Deploy updates (pull, rebuild if frontend changed, re-ingest if photos changed)
+# Deploy updates (pull, rebuild if frontend changed)
 git pull
 cd frontend && npm run build && cd ..        # only if frontend changed
-cd backend && .venv/bin/python -m app.ingest && cd ..   # only if photos changed
+backend/.venv/bin/pip install -r backend/requirements.txt   # only if deps changed
 systemctl --user restart wildlens.service
 
-# After adding photos
-cd backend && .venv/bin/python -m app.ingest
-systemctl --user restart wildlens.service    # (restart not strictly needed; index is read per-request)
+# Force a re-ingest manually
+systemctl --user start wildlens-ingest.service
 
 # Timers
 systemctl --user list-timers "wildlens*"

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { imageUrl } from '../api'
 
 const KIND_LABEL = {
@@ -9,12 +10,46 @@ const KIND_LABEL = {
   unknown: 'Unknown',
 }
 
-export default function PhotoDetail({ photo, onClose }) {
+export default function Lightbox({ photo, onClose, onPrev, onNext, hasPrev, hasNext }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft' && hasPrev) onPrev()
+      else if (e.key === 'ArrowRight' && hasNext) onNext()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, onPrev, onNext, hasPrev, hasNext])
+
   if (!photo) return null
   const subjects = photo.identification?.subjects || []
 
   return (
     <div className="detail-overlay" onClick={onClose}>
+      {hasPrev && (
+        <button
+          className="nav-arrow nav-prev"
+          onClick={(e) => {
+            e.stopPropagation()
+            onPrev()
+          }}
+          aria-label="Previous"
+        >
+          ‹
+        </button>
+      )}
+      {hasNext && (
+        <button
+          className="nav-arrow nav-next"
+          onClick={(e) => {
+            e.stopPropagation()
+            onNext()
+          }}
+          aria-label="Next"
+        >
+          ›
+        </button>
+      )}
       <div className="detail-card" onClick={(e) => e.stopPropagation()}>
         <button className="detail-close" onClick={onClose}>
           ×
