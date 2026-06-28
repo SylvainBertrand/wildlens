@@ -255,8 +255,7 @@ def get_item_download(item_id: str) -> tuple[str, str]:
     to it yields 401).
     """
     token = get_access_token()
-    meta = _graph_get(
-        f"/me/drive/items/{item_id}?$select=id,name,@microsoft.graph.downloadUrl", token)
+    meta = _graph_get(f"/me/drive/items/{item_id}", token)
     name = meta.get("name", f"{item_id}.bin")
     url = meta.get("@microsoft.graph.downloadUrl") or meta.get("@content.downloadUrl")
     if not url:
