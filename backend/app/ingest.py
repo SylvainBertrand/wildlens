@@ -29,13 +29,19 @@ from .identification import get_provider
 from .models import GeoPoint, Identification, IdentifiedSubject, Photo, PhotosResponse, Trip
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".3gp", ".mts", ".hevc"}
+MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS
 
 # Bump when the enrichment logic changes so cached entries are recomputed.
-PIPELINE_VERSION = "2"
+PIPELINE_VERSION = "3"
 
 
 def _photo_id(trip: str, rel: str) -> str:
     return hashlib.sha1(f"{trip}/{rel}".encode()).hexdigest()[:16]
+
+
+def _media_type(path: Path) -> str:
+    return "video" if path.suffix.lower() in VIDEO_EXTS else "image"
 
 
 def _signature(path: Path) -> str:
@@ -58,9 +64,24 @@ def _thumb_is_fresh(src: Path, dest: Path) -> bool:
     return dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime
 
 
+def _read_meta(path: Path, media_type: str) -> dict:
+    if media_type == "video":
+        from . import video
+        return video.read_metadata(path)
+    return read_metadata(path)
+
+
+def _build_thumb(path: Path, dest: Path, media_type: str) -> None:
+    if media_type == "video":
+        from . import video
+        video.make_poster(path, dest, settings.thumb_size)
+    else:
+        _make_thumb(path, dest, settings.thumb_size)
+
+
 def _iter_images(photos_dir: Path):
     for path in sorted(photos_dir.rglob("*")):
-        if path.is_file() and path.suffix.lower() in IMAGE_EXTS:
+        if path.is_file() and path.suffix.lower() in MEDIA_EXTS:
             yield path
 
 
@@ -76,9 +97,9 @@ def _compose_provider_tag(provider_name: str, used_geo: bool, used_facts: bool) 
 
 
 def _enrich(
-    path: Path, loc: GeoPoint | None, provider, geocoder, facts
+    path: Path, loc: GeoPoint | None, provider, geocoder, facts, media_type: str = "image"
 ) -> tuple[str | None, str | None, Identification]:
-    """Run the enrichment pipeline for one photo (network/CLI work happens here)."""
+    """Run the enrichment pipeline for one item (network/CLI work happens here)."""
     subjects: list[IdentifiedSubject] = []
     place_name: str | None = None
     place_detail: str | None = None
@@ -111,13 +132,15 @@ def _enrich(
                 fun_fact=nf["fun_fact"], source="wikipedia", url=nf.get("url")))
 
     # 2. Image-based subjects from the selected provider (none/mock/claude).
-    try:
-        ctx = {"place_name": place_name, "lat": loc.lat if loc else None,
-               "lon": loc.lon if loc else None}
-        vision = provider.identify(str(path), ctx)
-    except Exception as exc:  # noqa: BLE001
-        print(f"    ! identification failed: {exc}")
-        vision = Identification(provider=provider.name, subjects=[])
+    #    Skipped for videos (the providers are image-only).
+    vision = Identification(provider=provider.name, subjects=[])
+    if media_type == "image":
+        try:
+            ctx = {"place_name": place_name, "lat": loc.lat if loc else None,
+                   "lon": loc.lon if loc else None}
+            vision = provider.identify(str(path), ctx)
+        except Exception as exc:  # noqa: BLE001
+            print(f"    ! identification failed: {exc}")
 
     # 3. Fill missing fun facts for vision subjects from Wikipedia.
     for s in vision.subjects:
@@ -168,13 +191,14 @@ def build_index(force: bool = False) -> PhotosResponse:
         trip = rel.parts[0] if len(rel.parts) > 1 else "misc"
         pid = _photo_id(trip, str(rel).replace("\\", "/"))
 
-        meta = read_metadata(path)
+        media_type = _media_type(path)
+        meta = _read_meta(path, media_type)
         loc = GeoPoint(lat=meta["gps"][0], lon=meta["gps"][1]) if meta["gps"] else None
 
         thumb_path = settings.thumbs_dir / f"{pid}.jpg"
         if not _thumb_is_fresh(path, thumb_path):
             try:
-                _make_thumb(path, thumb_path, settings.thumb_size)
+                _build_thumb(path, thumb_path, media_type)
             except Exception as exc:  # noqa: BLE001
                 print(f"  ! thumbnail failed for {rel}: {exc}")
 
@@ -188,7 +212,8 @@ def build_index(force: bool = False) -> PhotosResponse:
             ident = Identification(**cached["identification"])
         else:
             print(f"  + enriching {rel}")
-            place_name, place_detail, ident = _enrich(path, loc, provider, geocoder, facts)
+            place_name, place_detail, ident = _enrich(
+                path, loc, provider, geocoder, facts, media_type)
             enrich_cache[pid] = {
                 "sig": sig,
                 "place_name": place_name,
@@ -202,6 +227,7 @@ def build_index(force: bool = False) -> PhotosResponse:
             thumb_url=f"/api/photos/{pid}/thumb",
             taken_at=meta["taken_at"], location=loc,
             place_name=place_name, place_detail=place_detail,
+            media_type=media_type, duration=meta.get("duration"),
             width=meta["width"], height=meta["height"],
             identification=ident,
         ))

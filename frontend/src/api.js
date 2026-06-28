@@ -67,7 +67,13 @@ export const onedrive = {
   connect: () => odJson('/connect', { method: 'POST' }),
   connectStatus: () => odJson('/connect/status'),
   disconnect: () => odJson('/disconnect', { method: 'POST' }),
-  browse: (itemId) => odJson(`/browse${itemId ? `?item_id=${encodeURIComponent(itemId)}` : ''}`),
+  browse: (itemId, cursor) =>
+    odJson(
+      `/browse?${new URLSearchParams({
+        ...(itemId ? { item_id: itemId } : {}),
+        ...(cursor ? { cursor } : {}),
+      }).toString()}`
+    ),
   thumbUrl: (itemId) => `${ONEDRIVE}/thumb/${encodeURIComponent(itemId)}`,
   import: (trip, itemIds) =>
     odJson('/import', {

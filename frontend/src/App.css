@@ -216,6 +216,18 @@ html, body, #root {
   border-radius: 4px;
   padding: 0 4px;
 }
+.gallery-play {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
 
 /* ---- Lightbox nav arrows ---- */
 .nav-arrow {
@@ -364,7 +376,31 @@ html, body, #root {
   margin-top: 10px;
 }
 .od-actions .upload-btn { margin-left: auto; }
+video.detail-img { object-fit: contain; background: #000; }
+
 .od-done { color: var(--accent); font-size: 13px; margin-top: 8px; }
+.od-vbadge {
+  position: absolute;
+  left: 4px; bottom: 4px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.od-hint { font-size: 12px; }
+.od-sentinel { height: 1px; }
+.od-mini {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.od-mini:disabled { color: var(--muted); cursor: not-allowed; }
+.od-selcount { font-size: 12px; margin-right: auto; }
 
 .state {
   position: absolute;

@@ -110,11 +110,11 @@ def disconnect():
 
 # --- browse ----------------------------------------------------------------
 @router.get("/browse")
-def browse(item_id: str | None = None):
+def browse(item_id: str | None = None, cursor: str | None = None, page_size: int = 60):
     _require_configured()
     od = _od()
     try:
-        return od.browse(item_id)
+        return od.browse(item_id, cursor=cursor, page_size=min(max(page_size, 10), 200))
     except od.NotConnectedError as exc:
         raise HTTPException(status_code=401, detail="OneDrive not connected") from exc
     except Exception as exc:  # noqa: BLE001

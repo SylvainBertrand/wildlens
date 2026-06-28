@@ -34,6 +34,8 @@ class Photo(BaseModel):
     location: GeoPoint | None = None
     place_name: str | None = None
     place_detail: str | None = None   # e.g. "Teton County, Wyoming"
+    media_type: str = "image"         # "image" | "video"
+    duration: float | None = None     # seconds, for videos
     width: int | None = None
     height: int | None = None
     identification: Identification | None = None

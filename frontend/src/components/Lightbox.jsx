@@ -54,7 +54,11 @@ export default function Lightbox({ photo, onClose, onPrev, onNext, hasPrev, hasN
         <button className="detail-close" onClick={onClose}>
           ×
         </button>
-        <img className="detail-img" src={imageUrl(photo)} alt={photo.filename} />
+        {photo.media_type === 'video' ? (
+          <video className="detail-img" src={imageUrl(photo)} controls autoPlay playsInline />
+        ) : (
+          <img className="detail-img" src={imageUrl(photo)} alt={photo.filename} />
+        )}
         <div className="detail-body">
           <h2>{photo.place_name || photo.filename}</h2>
           {photo.place_detail && <p className="detail-place">{photo.place_detail}</p>}

@@ -16,8 +16,9 @@ from ..ingest_runner import read_status, request_ingest
 
 router = APIRouter(prefix="/api", tags=["manage"])
 
-ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
-MAX_BYTES = 50 * 1024 * 1024  # 50 MB per file
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff",
+                ".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".3gp", ".mts", ".hevc"}
+MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB per file (videos)
 
 
 def _slug(value: str, fallback: str) -> str:

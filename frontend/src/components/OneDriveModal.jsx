@@ -1,44 +1,88 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { onedrive } from '../api'
 
+function fmtDuration(ms) {
+  if (!ms) return ''
+  const s = Math.round(ms / 1000)
+  const m = Math.floor(s / 60)
+  return `${m}:${String(s % 60).padStart(2, '0')}`
+}
+
 export default function OneDriveModal({ trips, onClose, onImported }) {
   const [status, setStatus] = useState(null)
-  const [device, setDevice] = useState(null) // {user_code, verification_uri}
+  const [device, setDevice] = useState(null)
   const [stack, setStack] = useState([{ id: null, name: 'OneDrive' }])
-  const [listing, setListing] = useState(null)
+  const [folders, setFolders] = useState([])
+  const [media, setMedia] = useState([])
+  const [cursor, setCursor] = useState(null)
+  const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
+  const [anchor, setAnchor] = useState(null)
   const [trip, setTrip] = useState('')
   const [newTrip, setNewTrip] = useState('')
   const [imp, setImp] = useState(null)
   const [error, setError] = useState(null)
-  const [busy, setBusy] = useState(false)
   const pollRef = useRef(null)
+  const sentinelRef = useRef(null)
 
   const current = stack[stack.length - 1]
   const effectiveTrip = trip === '__new__' ? newTrip.trim() : trip
 
-  const loadListing = useCallback(async (itemId) => {
-    setBusy(true)
+  const openFolderId = useCallback(async (itemId) => {
+    setLoading(true)
     setError(null)
+    setMedia([])
+    setFolders([])
+    setCursor(null)
+    setSelected(new Set())
+    setAnchor(null)
     try {
-      setListing(await onedrive.browse(itemId))
+      const page = await onedrive.browse(itemId, null)
+      setFolders(page.folders || [])
+      setMedia(page.media || [])
+      setCursor(page.next || null)
     } catch (e) {
       setError(e.message)
     } finally {
-      setBusy(false)
+      setLoading(false)
     }
   }, [])
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loading) return
+    setLoading(true)
+    try {
+      const page = await onedrive.browse(current.id, cursor)
+      setMedia((m) => [...m, ...(page.media || [])])
+      setCursor(page.next || null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [cursor, loading, current.id])
 
   useEffect(() => {
     onedrive
       .status()
       .then((s) => {
         setStatus(s)
-        if (s.connected) loadListing(null)
+        if (s.connected) openFolderId(null)
       })
       .catch((e) => setError(e.message))
     return () => pollRef.current && clearInterval(pollRef.current)
-  }, [loadListing])
+  }, [openFolderId])
+
+  // Infinite scroll: load the next page when the sentinel scrolls into view.
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadMore()
+    }, { rootMargin: '300px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loadMore])
 
   async function startConnect() {
     setError(null)
@@ -51,9 +95,8 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
           if (cs.state === 'connected') {
             clearInterval(pollRef.current)
             setDevice(null)
-            const s = await onedrive.status()
-            setStatus(s)
-            loadListing(null)
+            setStatus(await onedrive.status())
+            openFolderId(null)
           } else if (cs.state === 'error') {
             clearInterval(pollRef.current)
             setError(cs.error || 'Connection failed')
@@ -70,21 +113,39 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
 
   function openFolder(folder) {
     setStack((s) => [...s, { id: folder.id, name: folder.name }])
-    loadListing(folder.id)
+    openFolderId(folder.id)
   }
 
   function goTo(index) {
-    const target = stack[index]
     setStack(stack.slice(0, index + 1))
-    loadListing(target.id)
+    openFolderId(stack[index].id)
   }
 
-  function toggle(id) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+  function clickItem(index, e) {
+    const id = media[index].id
+    if (e.shiftKey && anchor !== null) {
+      const [lo, hi] = anchor < index ? [anchor, index] : [index, anchor]
+      setSelected((prev) => {
+        const next = new Set(prev)
+        for (let i = lo; i <= hi; i++) next.add(media[i].id)
+        return next
+      })
+    } else {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
+      setAnchor(index)
+    }
+  }
+
+  function selectAllLoaded() {
+    setSelected(new Set(media.map((m) => m.id)))
+  }
+  function clearSelection() {
+    setSelected(new Set())
+    setAnchor(null)
   }
 
   async function startImport() {
@@ -103,7 +164,7 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
           setImp(st)
           if (st.state === 'done' || st.state === 'error') {
             clearInterval(pollRef.current)
-            setSelected(new Set())
+            clearSelection()
             onImported?.()
           }
         } catch {
@@ -114,6 +175,8 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
       setError(e.message)
     }
   }
+
+  const thumbFor = (m) => m.thumb_url || onedrive.thumbUrl(m.id)
 
   return (
     <div className="detail-overlay" onClick={onClose}>
@@ -128,7 +191,7 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
         {status && !status.configured && (
           <p className="muted">
             OneDrive isn’t configured. Set <code>WILDLENS_ONEDRIVE_CLIENT_ID</code> in{' '}
-            <code>.env</code> (see README) and restart.
+            <code>.env</code> and restart.
           </p>
         )}
 
@@ -168,41 +231,47 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
                   </span>
                 ))}
               </nav>
-              {status.account && (
-                <span className="od-account">{status.account.email || status.account.name}</span>
-              )}
+              <span className="od-hint muted">Shift-click to select a range</span>
             </div>
 
-            {busy && <div className="muted od-pad">Loading…</div>}
-
-            {listing && !busy && (
-              <div className="od-browser">
-                {listing.folders.map((f) => (
-                  <button key={f.id} className="od-folder" onClick={() => openFolder(f)}>
-                    📁 {f.name}
-                    {f.count ? <span className="od-count">{f.count}</span> : null}
+            <div className="od-browser">
+              {folders.map((f) => (
+                <button key={f.id} className="od-folder" onClick={() => openFolder(f)}>
+                  📁 {f.name}
+                  {f.count ? <span className="od-count">{f.count}</span> : null}
+                </button>
+              ))}
+              <div className="od-grid">
+                {media.map((m, i) => (
+                  <button
+                    key={m.id}
+                    className={`od-cell ${selected.has(m.id) ? 'sel' : ''}`}
+                    onClick={(e) => clickItem(i, e)}
+                    title={m.name}
+                  >
+                    <img src={thumbFor(m)} alt={m.name} loading="lazy" />
+                    {m.media_type === 'video' && (
+                      <span className="od-vbadge">▶ {fmtDuration(m.duration)}</span>
+                    )}
+                    <span className="od-check">{selected.has(m.id) ? '✓' : ''}</span>
                   </button>
                 ))}
-                <div className="od-grid">
-                  {listing.images.map((img) => (
-                    <button
-                      key={img.id}
-                      className={`od-cell ${selected.has(img.id) ? 'sel' : ''}`}
-                      onClick={() => toggle(img.id)}
-                      title={img.name}
-                    >
-                      <img src={onedrive.thumbUrl(img.id)} alt={img.name} loading="lazy" />
-                      <span className="od-check">{selected.has(img.id) ? '✓' : ''}</span>
-                    </button>
-                  ))}
-                </div>
-                {listing.folders.length === 0 && listing.images.length === 0 && (
-                  <p className="muted od-pad">This folder is empty.</p>
-                )}
               </div>
-            )}
+              {loading && <div className="muted od-pad">Loading…</div>}
+              {!loading && media.length === 0 && folders.length === 0 && (
+                <p className="muted od-pad">This folder is empty.</p>
+              )}
+              <div ref={sentinelRef} className="od-sentinel" />
+            </div>
 
             <div className="od-actions">
+              <button className="od-mini" onClick={selectAllLoaded} disabled={media.length === 0}>
+                Select loaded
+              </button>
+              <button className="od-mini" onClick={clearSelection} disabled={selected.size === 0}>
+                Clear
+              </button>
+              <span className="od-selcount muted">{selected.size} selected</span>
               <select value={trip} onChange={(e) => setTrip(e.target.value)} className="upload-trip">
                 <option value="">Trip…</option>
                 {trips.map((t) => (
@@ -227,7 +296,7 @@ export default function OneDriveModal({ trips, onClose, onImported }) {
               >
                 {imp?.state === 'running'
                   ? `Importing ${imp.done}/${imp.total}…`
-                  : `Import ${selected.size} photo${selected.size === 1 ? '' : 's'}`}
+                  : `Import ${selected.size}`}
               </button>
             </div>
 

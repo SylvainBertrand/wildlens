@@ -20,7 +20,9 @@ from ..config import settings
 
 SCOPES = "Files.Read offline_access User.Read"
 GRAPH = "https://graph.microsoft.com/v1.0"
+GRAPH_PREFIX = "https://graph.microsoft.com/"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".3gp", ".mts", ".hevc"}
 
 # In-memory access-token cache (avoids refreshing on every request).
 _access_cache: dict = {"token": None, "expires_at": 0.0}
@@ -165,39 +167,75 @@ def _classify(item: dict) -> str | None:
     if "folder" in item:
         return "folder"
     name = item.get("name", "")
+    ext = Path(name).suffix.lower()
     mime = (item.get("file") or {}).get("mimeType", "")
-    if mime.startswith("image/") or Path(name).suffix.lower() in IMAGE_EXTS:
+    if mime.startswith("image/") or ext in IMAGE_EXTS:
         return "image"
+    if mime.startswith("video/") or "video" in item or ext in VIDEO_EXTS:
+        return "video"
     return None
 
 
-def browse(item_id: str | None = None) -> dict:
-    """List child folders and images of a OneDrive folder (root if item_id is None)."""
-    token = get_access_token()
-    if item_id:
-        path = f"/me/drive/items/{item_id}/children"
-    else:
-        path = "/me/drive/root/children"
-    path += "?$top=200&$select=id,name,folder,file,size,photo,parentReference"
+def _media_entry(item: dict, kind: str) -> dict:
+    thumb_url = None
+    thumbs = item.get("thumbnails") or []
+    if thumbs:
+        thumb_url = (thumbs[0].get("medium") or thumbs[0].get("large")
+                     or thumbs[0].get("small") or {}).get("url")
+    entry = {"id": item["id"], "name": item["name"], "size": item.get("size"),
+             "media_type": kind, "thumb_url": thumb_url}
+    if kind == "video":
+        entry["duration"] = (item.get("video") or {}).get("duration")  # ms
+    return entry
 
+
+def _list_folders(item_id: str | None, token: str) -> list[dict]:
+    """Subfolders only (filtered), so they always show regardless of media paging."""
+    base = (f"/me/drive/items/{item_id}/children" if item_id
+            else "/me/drive/root/children")
+    url = base + "?$filter=folder%20ne%20null&$top=200&$select=id,name,folder"
     folders: list[dict] = []
-    images: list[dict] = []
-    url = path
     while url:
         data = _graph_get(url, token)
         for item in data.get("value", []):
-            kind = _classify(item)
-            if kind == "folder":
-                folders.append({"id": item["id"], "name": item["name"],
-                                "count": (item.get("folder") or {}).get("childCount", 0)})
-            elif kind == "image":
-                images.append({"id": item["id"], "name": item["name"],
-                               "size": item.get("size")})
+            folders.append({"id": item["id"], "name": item["name"],
+                            "count": (item.get("folder") or {}).get("childCount", 0)})
         url = data.get("@odata.nextLink")
-
     folders.sort(key=lambda f: f["name"].lower())
-    images.sort(key=lambda f: f["name"].lower())
-    return {"folders": folders, "images": images}
+    return folders
+
+
+def browse(item_id: str | None = None, cursor: str | None = None,
+           page_size: int = 60) -> dict:
+    """Page through a OneDrive folder's media, newest first.
+
+    Returns {folders, media, next}. `folders` is populated only on the first
+    page (cursor=None). `media` holds images + videos for this page with inline
+    thumbnail URLs. `next` is an opaque cursor for the following page (or None).
+    """
+    token = get_access_token()
+
+    if cursor:
+        # SSRF guard: only ever follow Graph-issued continuation URLs.
+        if not cursor.startswith(GRAPH_PREFIX):
+            raise OneDriveError("invalid cursor")
+        data = _graph_get(cursor, token)
+        folders = []
+    else:
+        base = (f"/me/drive/items/{item_id}/children" if item_id
+                else "/me/drive/root/children")
+        query = (f"?$top={int(page_size)}&$orderby=lastModifiedDateTime%20desc"
+                 "&$expand=thumbnails&$select=id,name,folder,file,size,video")
+        data = _graph_get(base + query, token)
+        folders = _list_folders(item_id, token)
+
+    media: list[dict] = []
+    for item in data.get("value", []):
+        kind = _classify(item)
+        if kind in ("image", "video"):
+            media.append(_media_entry(item, kind))
+
+    return {"folders": folders, "media": media, "next": data.get("@odata.nextLink")}
 
 
 def thumbnail_bytes(item_id: str) -> bytes:

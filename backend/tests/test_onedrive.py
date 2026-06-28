@@ -18,6 +18,24 @@ def test_classify_folder_image_other():
 
 
 @pytest.mark.unit
+def test_classify_video():
+    assert onedrive._classify({"name": "clip.MP4", "file": {"mimeType": "video/mp4"}}) == "video"
+    assert onedrive._classify({"name": "clip.mov"}) == "video"
+    assert onedrive._classify({"name": "x", "video": {"duration": 1000}}) == "video"
+
+
+@pytest.mark.unit
+def test_media_entry_includes_thumb_and_duration():
+    item = {"id": "1", "name": "v.mp4", "size": 9,
+            "video": {"duration": 4200},
+            "thumbnails": [{"medium": {"url": "https://t/medium"}}]}
+    e = onedrive._media_entry(item, "video")
+    assert e["media_type"] == "video"
+    assert e["thumb_url"] == "https://t/medium"
+    assert e["duration"] == 4200
+
+
+@pytest.mark.unit
 def test_status_unconfigured(monkeypatch):
     monkeypatch.setattr(settings, "onedrive_client_id", "")
     client = TestClient(create_app())

@@ -25,6 +25,7 @@ export default function Gallery({ photos, onSelect }) {
                     title={p.place_name || p.filename}
                   >
                     <img src={thumbUrl(p)} alt={p.place_name || p.filename} loading="lazy" />
+                    {p.media_type === 'video' && <span className="gallery-play">▶</span>}
                     {!p.location && <span className="gallery-badge" title="No location">⌖</span>}
                   </button>
                 ))}
