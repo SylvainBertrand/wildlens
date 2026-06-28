@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { imageUrl } from '../api'
+import { imageUrl, thumbUrl } from '../api'
 
 const KIND_LABEL = {
   place: 'Place',
@@ -30,8 +30,19 @@ function useMediaSize(photo) {
   return { w: Math.round(natW * scale), h: Math.round(natH * scale) }
 }
 
-export default function Lightbox({ photo, onClose, onPrev, onNext, hasPrev, hasNext }) {
+export default function Lightbox({
+  photo,
+  onClose,
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+  siblings = [],
+  onSelect,
+  onDelete,
+}) {
   const size = useMediaSize(photo)
+  const [marked, setMarked] = useState(() => new Set())
 
   useEffect(() => {
     function onKey(e) {
@@ -43,8 +54,27 @@ export default function Lightbox({ photo, onClose, onPrev, onNext, hasPrev, hasN
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, onPrev, onNext, hasPrev, hasNext])
 
+  // Reset deletion marks when the group changes.
+  useEffect(() => setMarked(new Set()), [photo?.group_id])
+
   if (!photo) return null
   const subjects = photo.identification?.subjects || []
+  const hasGroup = siblings.length > 1
+
+  const toggleMark = (id) =>
+    setMarked((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  async function confirmDelete() {
+    const ids = [...marked]
+    if (ids.length === 0) return
+    if (!window.confirm(`Move ${ids.length} photo(s) to trash? (recoverable)`)) return
+    await onDelete(ids)
+    setMarked(new Set())
+  }
 
   return (
     <div className="detail-overlay" onClick={onClose}>
@@ -95,6 +125,44 @@ export default function Lightbox({ photo, onClose, onPrev, onNext, hasPrev, hasN
             {photo.location &&
               ` \u00b7 ${photo.location.lat.toFixed(4)}, ${photo.location.lon.toFixed(4)}`}
           </p>
+
+          {hasGroup && (
+            <div className="similar">
+              <div className="similar-head">
+                <span>{siblings.length} similar</span>
+                {marked.size > 0 && (
+                  <button className="similar-del" onClick={confirmDelete}>
+                    Move {marked.size} to trash
+                  </button>
+                )}
+              </div>
+              <div className="similar-strip">
+                {siblings.map((s) => (
+                  <div
+                    key={s.id}
+                    className={`similar-cell ${s.id === photo.id ? 'current' : ''} ${
+                      marked.has(s.id) ? 'marked' : ''
+                    }`}
+                  >
+                    <img
+                      src={thumbUrl(s)}
+                      alt=""
+                      loading="lazy"
+                      onClick={() => onSelect(s.id)}
+                    />
+                    {s.media_type === 'video' && <span className="similar-vbadge">▶</span>}
+                    <label className="similar-check" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={marked.has(s.id)}
+                        onChange={() => toggleMark(s.id)}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {subjects.length === 0 && (
             <p className="muted">No fun facts found for this spot yet.</p>

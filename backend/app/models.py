@@ -36,6 +36,7 @@ class Photo(BaseModel):
     place_detail: str | None = None   # e.g. "Teton County, Wyoming"
     media_type: str = "image"         # "image" | "video"
     duration: float | None = None     # seconds, for videos
+    group_id: str | None = None       # near-duplicate cluster (None if unique)
     width: int | None = None
     height: int | None = None
     identification: Identification | None = None

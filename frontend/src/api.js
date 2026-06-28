@@ -39,6 +39,16 @@ export async function triggerIngest() {
   return res.json()
 }
 
+export async function deletePhotos(ids) {
+  const res = await fetch('/api/photos/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+  if (!res.ok) throw new Error(`Failed to delete (${res.status})`)
+  return res.json()
+}
+
 export async function fetchIngestStatus() {
   const res = await fetch('/api/ingest/status')
   if (!res.ok) throw new Error(`Failed to fetch ingest status (${res.status})`)

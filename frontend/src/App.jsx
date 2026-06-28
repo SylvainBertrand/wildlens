@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchPhotos, fetchIngestStatus, onedrive } from './api'
+import { fetchPhotos, fetchIngestStatus, onedrive, deletePhotos } from './api'
 import MapView from './components/MapView'
 import Gallery from './components/Gallery'
 import Sidebar from './components/Sidebar'
@@ -86,6 +86,36 @@ export default function App() {
   const selected = selectedId ? byId.get(selectedId) : null
   const navIndex = selectedId ? navOrder.indexOf(selectedId) : -1
 
+  // Near-duplicate groups: group_id -> [photos sorted by time].
+  const groupMembers = useMemo(() => {
+    const m = new Map()
+    for (const p of data.photos) {
+      if (!p.group_id) continue
+      if (!m.has(p.group_id)) m.set(p.group_id, [])
+      m.get(p.group_id).push(p)
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => (a.taken_at || '').localeCompare(b.taken_at || '') || a.filename.localeCompare(b.filename))
+    }
+    return m
+  }, [data.photos])
+
+  const siblings = selected?.group_id ? groupMembers.get(selected.group_id) || [] : []
+
+  const handleDelete = useCallback(
+    async (ids) => {
+      const set = new Set(ids)
+      // Move selection to a surviving sibling (or close) before the data refresh.
+      if (selectedId && set.has(selectedId)) {
+        const survivor = siblings.find((p) => !set.has(p.id))
+        setSelectedId(survivor ? survivor.id : null)
+      }
+      await deletePhotos(ids)
+      watchIngest()
+    },
+    [selectedId, siblings, watchIngest]
+  )
+
   const providerName = data.photos[0]?.identification?.provider
 
   return (
@@ -167,6 +197,9 @@ export default function App() {
         }
         hasPrev={navIndex > 0}
         hasNext={navIndex >= 0 && navIndex < navOrder.length - 1}
+        siblings={siblings}
+        onSelect={setSelectedId}
+        onDelete={handleDelete}
       />
 
       {showOneDrive && (

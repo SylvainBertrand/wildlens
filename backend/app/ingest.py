@@ -184,6 +184,7 @@ def build_index(force: bool = False) -> PhotosResponse:
     photos: list[Photo] = []
     trips: dict[str, dict] = {}
     path_map: dict[str, str] = {}
+    dedup_items: list[dict] = []
     hits = 0
 
     for path in _iter_images(photos_dir):
@@ -226,16 +227,35 @@ def build_index(force: bool = False) -> PhotosResponse:
             place_name = cached.get("place_name")
             place_detail = cached.get("place_detail")
             ident = Identification(**cached["identification"])
+            dhash = cached.get("dhash")
+            if dhash is None and media_type == "image" and settings.dedup_enabled:
+                from . import dedup
+                dhash = dedup.dhash(path)
+                cached["dhash"] = dhash
         else:
             print(f"  + enriching {rel}")
             place_name, place_detail, ident = _enrich(
                 path, loc, provider, geocoder, facts, media_type)
+            dhash = None
+            if media_type == "image" and settings.dedup_enabled:
+                from . import dedup
+                dhash = dedup.dhash(path)
             enrich_cache[pid] = {
                 "sig": sig,
                 "place_name": place_name,
                 "place_detail": place_detail,
                 "identification": ident.model_dump(),
+                "dhash": dhash,
             }
+
+        ts = None
+        if meta["taken_at"]:
+            try:
+                from datetime import datetime
+                ts = datetime.fromisoformat(meta["taken_at"]).timestamp()
+            except ValueError:
+                ts = None
+        dedup_items.append({"id": pid, "trip": trip, "dhash": dhash, "ts": ts})
 
         photos.append(Photo(
             id=pid, trip=trip, filename=path.name,
@@ -258,6 +278,15 @@ def build_index(force: bool = False) -> PhotosResponse:
             t["maxLat"] = loc.lat if t["maxLat"] is None else max(t["maxLat"], loc.lat)
             t["minLon"] = loc.lon if t["minLon"] is None else min(t["minLon"], loc.lon)
             t["maxLon"] = loc.lon if t["maxLon"] is None else max(t["maxLon"], loc.lon)
+
+    # Near-duplicate grouping across all photos (after the per-photo loop).
+    if settings.dedup_enabled:
+        from . import dedup
+        groups = dedup.cluster(dedup_items, threshold=settings.dedup_threshold,
+                               time_window=settings.dedup_time_window)
+        if groups:
+            for p in photos:
+                p.group_id = groups.get(p.id)
 
     trip_models = []
     for name, t in sorted(trips.items()):

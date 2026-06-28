@@ -6,6 +6,7 @@ ingest worker, so the request path stays lightweight (no image decoding here).
 from __future__ import annotations
 
 import re
+import shutil
 import unicodedata
 from pathlib import Path
 
@@ -98,3 +99,45 @@ def trigger_ingest():
 @router.get("/ingest/status")
 def ingest_status():
     return read_status()
+
+
+@router.post("/photos/delete")
+def delete_photos(payload: dict):
+    """Move the given photos' originals to data/.trash/ (recoverable), drop their
+    cached thumbnail/web versions, then re-ingest.
+    """
+    ids = payload.get("ids") or []
+    if not ids:
+        raise HTTPException(status_code=400, detail="No ids provided")
+
+    paths_file = settings.cache_dir / "paths.json"
+    path_map = {}
+    if paths_file.exists():
+        import json
+        path_map = json.loads(paths_file.read_text())
+
+    trashed: list[str] = []
+    missing: list[str] = []
+    for pid in ids:
+        src = path_map.get(pid)
+        if not src or not Path(src).exists():
+            missing.append(pid)
+            continue
+        src_path = Path(src)
+        # Preserve the trip subfolder layout under .trash/.
+        try:
+            rel = src_path.relative_to(settings.photos_dir)
+        except ValueError:
+            rel = Path(src_path.name)
+        dest = settings.trash_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            dest = dest.with_name(f"{dest.stem}-{pid}{dest.suffix}")
+        shutil.move(str(src_path), str(dest))
+        (settings.thumbs_dir / f"{pid}.jpg").unlink(missing_ok=True)
+        (settings.web_dir / f"{pid}.mp4").unlink(missing_ok=True)
+        trashed.append(pid)
+
+    if trashed:
+        request_ingest()
+    return {"trashed": trashed, "missing": missing, "ingest": "triggered" if trashed else "none"}

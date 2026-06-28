@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     geocode_enabled: bool = True   # GPS -> place name (Nominatim)
     facts_enabled: bool = True     # place/subject -> fun fact (Wikipedia)
 
+    # Near-duplicate grouping (perceptual hash, ingest-time). Higher threshold =
+    # looser grouping. time_window bounds grouping to photos taken close together.
+    dedup_enabled: bool = True
+    dedup_threshold: int = 10      # max Hamming distance (0-64) to group
+    dedup_time_window: int = 180   # seconds
+
     # Idle auto-shutdown (seconds). >0 makes the server exit after this much
     # inactivity so socket activation can keep idle CPU/RAM at zero. 0 disables
     # (always-on). Intended to be set by the socket-activated systemd unit.
@@ -79,6 +85,11 @@ class Settings(BaseSettings):
     def onedrive_token_path(self) -> Path:
         # Holds the OAuth refresh token — lives in gitignored data/, never the repo.
         return self.data_dir / "onedrive_token.json"
+
+    @property
+    def trash_dir(self) -> Path:
+        # Deleted originals are moved here (recoverable). Not scanned by ingest.
+        return self.data_dir / ".trash"
 
     @property
     def onedrive_configured(self) -> bool:
