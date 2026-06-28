@@ -124,6 +124,7 @@ export default function Lightbox({
             {photo.taken_at ? new Date(photo.taken_at).toLocaleString() : 'date unknown'}
             {photo.location &&
               ` \u00b7 ${photo.location.lat.toFixed(4)}, ${photo.location.lon.toFixed(4)}`}
+            {photo.location_inferred && <span className="approx"> · approx. location</span>}
           </p>
 
           {hasGroup && (

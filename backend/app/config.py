@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     dedup_threshold: int = 14      # max Hamming distance (0-64) to group
     dedup_time_window: int = 300   # seconds
 
+    # Infer a location for media missing GPS from the nearest-in-time photo in
+    # the same trip (within infer_location_window seconds). Marked as inferred.
+    infer_location_enabled: bool = True
+    infer_location_window: int = 1800  # seconds (30 min)
+
     # Idle auto-shutdown (seconds). >0 makes the server exit after this much
     # inactivity so socket activation can keep idle CPU/RAM at zero. 0 disables
     # (always-on). Intended to be set by the socket-activated systemd unit.

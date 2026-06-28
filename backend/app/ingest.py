@@ -96,6 +96,64 @@ def _compose_provider_tag(provider_name: str, used_geo: bool, used_facts: bool) 
     return "+".join(parts) if parts else "none"
 
 
+def _photo_ts(p) -> float | None:
+    if not p.taken_at:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(p.taken_at).timestamp()
+    except ValueError:
+        return None
+
+
+def _infer_locations(photos, geocoder, facts, window: int) -> int:
+    """Fill missing locations from the nearest-in-time located photo per trip.
+
+    Inferred items are flagged (location_inferred) and get a place name + nearby
+    landmark fact for the inferred coordinates. Returns how many were inferred.
+    """
+    by_trip: dict[str, list] = {}
+    for p in photos:
+        by_trip.setdefault(p.trip, []).append(p)
+
+    inferred = 0
+    for items in by_trip.values():
+        located = sorted(
+            ((_photo_ts(p), p) for p in items if p.location and _photo_ts(p) is not None),
+            key=lambda x: x[0],
+        )
+        if not located:
+            continue
+        for p in items:
+            if p.location:
+                continue
+            t = _photo_ts(p)
+            if t is None:
+                continue
+            ts_near, near = min(located, key=lambda x: abs(x[0] - t))
+            if abs(ts_near - t) > window:
+                continue
+            p.location = GeoPoint(lat=near.location.lat, lon=near.location.lon)
+            p.location_inferred = True
+            inferred += 1
+            # Enrich the inferred location (place name + nearest landmark fact).
+            try:
+                if geocoder is not None:
+                    geo = geocoder.reverse(p.location.lat, p.location.lon)
+                    if geo:
+                        p.place_name = geo.get("place_name")
+                        p.place_detail = geo.get("detail") or None
+                if facts is not None:
+                    nf = facts.nearby_fact(p.location.lat, p.location.lon)
+                    if nf and p.identification is not None:
+                        p.identification.subjects.insert(0, IdentifiedSubject(
+                            kind="landmark", label=nf["label"], confidence=1.0,
+                            fun_fact=nf["fun_fact"], source="wikipedia", url=nf.get("url")))
+            except Exception as exc:  # noqa: BLE001
+                print(f"    ! inferred-location enrich failed for {p.filename}: {exc}")
+    return inferred
+
+
 def _enrich(
     path: Path, loc: GeoPoint | None, provider, geocoder, facts, media_type: str = "image"
 ) -> tuple[str | None, str | None, Identification]:
@@ -269,15 +327,12 @@ def build_index(force: bool = False) -> PhotosResponse:
         ))
         path_map[pid] = str(path.resolve())
 
-        t = trips.setdefault(trip, {"count": 0, "located": 0, "minLat": None,
-                                    "minLon": None, "maxLat": None, "maxLon": None})
-        t["count"] += 1
-        if loc:
-            t["located"] += 1
-            t["minLat"] = loc.lat if t["minLat"] is None else min(t["minLat"], loc.lat)
-            t["maxLat"] = loc.lat if t["maxLat"] is None else max(t["maxLat"], loc.lat)
-            t["minLon"] = loc.lon if t["minLon"] is None else min(t["minLon"], loc.lon)
-            t["maxLon"] = loc.lon if t["maxLon"] is None else max(t["maxLon"], loc.lon)
+    # Infer locations for media missing GPS from temporal neighbours (before the
+    # trip aggregation so inferred points count toward bounds/located).
+    if settings.infer_location_enabled:
+        n = _infer_locations(photos, geocoder, facts, settings.infer_location_window)
+        if n:
+            print(f"  ~ inferred location for {n} item(s) from temporal neighbours")
 
     # Near-duplicate grouping across all photos (after the per-photo loop).
     if settings.dedup_enabled:
@@ -287,6 +342,19 @@ def build_index(force: bool = False) -> PhotosResponse:
         if groups:
             for p in photos:
                 p.group_id = groups.get(p.id)
+
+    # Aggregate trips from the final photo set (after inference).
+    for p in photos:
+        t = trips.setdefault(p.trip, {"count": 0, "located": 0, "minLat": None,
+                                      "minLon": None, "maxLat": None, "maxLon": None})
+        t["count"] += 1
+        if p.location:
+            lat, lon = p.location.lat, p.location.lon
+            t["located"] += 1
+            t["minLat"] = lat if t["minLat"] is None else min(t["minLat"], lat)
+            t["maxLat"] = lat if t["maxLat"] is None else max(t["maxLat"], lat)
+            t["minLon"] = lon if t["minLon"] is None else min(t["minLon"], lon)
+            t["maxLon"] = lon if t["maxLon"] is None else max(t["maxLon"], lon)
 
     trip_models = []
     for name, t in sorted(trips.items()):

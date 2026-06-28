@@ -7,9 +7,10 @@ import { thumbUrl } from '../api'
 // Default Leaflet marker icons don't resolve under bundlers; build a small
 // photo-thumbnail divIcon instead so each pin shows the picture.
 function photoIcon(photo) {
+  const cls = photo.location_inferred ? 'photo-pin-inner inferred' : 'photo-pin-inner'
   return L.divIcon({
     className: 'photo-pin',
-    html: `<div class="photo-pin-inner"><img src="${thumbUrl(photo)}" alt="" /></div>`,
+    html: `<div class="${cls}"><img src="${thumbUrl(photo)}" alt="" /></div>`,
     iconSize: [54, 54],
     iconAnchor: [27, 27],
   })

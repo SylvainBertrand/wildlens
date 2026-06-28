@@ -37,6 +37,7 @@ class Photo(BaseModel):
     media_type: str = "image"         # "image" | "video"
     duration: float | None = None     # seconds, for videos
     group_id: str | None = None       # near-duplicate cluster (None if unique)
+    location_inferred: bool = False    # location copied from a temporal neighbour
     width: int | None = None
     height: int | None = None
     identification: Identification | None = None
