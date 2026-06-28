@@ -147,9 +147,9 @@ def _import_loop(item_ids: list[str], trip_slug: str):
     done = 0
     for iid in item_ids:
         try:
-            name, content = od.download_item(iid)
+            name, url = od.get_item_download(iid)
             target = _unique_path(dest_dir, _safe_filename(name))
-            target.write_bytes(content)
+            od.stream_to(url, target)
         except Exception as exc:  # noqa: BLE001
             errors.append({"item_id": iid, "error": str(exc)})
         finally:

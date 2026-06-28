@@ -247,10 +247,29 @@ def thumbnail_bytes(item_id: str) -> bytes:
     return _graph_get(url, token, raw=True)
 
 
-def download_item(item_id: str) -> tuple[str, bytes]:
-    """Return (filename, original bytes) for a OneDrive item."""
+def get_item_download(item_id: str) -> tuple[str, str]:
+    """Return (filename, pre-authenticated download URL) for a OneDrive item.
+
+    The @microsoft.graph.downloadUrl is short-lived and already authenticated, so
+    it must be fetched WITHOUT an Authorization header (sending the bearer token
+    to it yields 401).
+    """
     token = get_access_token()
-    meta = _graph_get(f"/me/drive/items/{item_id}?$select=id,name,file", token)
-    name = meta.get("name", f"{item_id}.jpg")
-    content = _graph_get(f"/me/drive/items/{item_id}/content", token, raw=True, timeout=120.0)
-    return name, content
+    meta = _graph_get(
+        f"/me/drive/items/{item_id}?$select=id,name,@microsoft.graph.downloadUrl", token)
+    name = meta.get("name", f"{item_id}.bin")
+    url = meta.get("@microsoft.graph.downloadUrl") or meta.get("@content.downloadUrl")
+    if not url:
+        raise OneDriveError("no download URL for item")
+    return name, url
+
+
+def stream_to(url: str, dest, timeout: float = 300.0) -> None:
+    """Stream a pre-authenticated download URL to a file (no auth header)."""
+    import shutil
+    req = urllib.request.Request(url)  # deliberately no Authorization header
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp, open(dest, "wb") as fh:
+            shutil.copyfileobj(resp, fh, length=1024 * 256)
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+        raise OneDriveError(f"download failed: {exc}") from exc
