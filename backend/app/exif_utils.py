@@ -65,13 +65,23 @@ def extract_taken_at(exif) -> str | None:
     return None
 
 
+_ORIENTATION_TAG = 0x0112  # EXIF Orientation
+
+
 def read_metadata(path) -> dict:
-    """Return {gps, taken_at, width, height} for an image path."""
+    """Return {gps, taken_at, width, height} for an image path.
+
+    width/height reflect the DISPLAY orientation (EXIF orientation applied), so
+    they match what the browser renders.
+    """
     out: dict = {"gps": None, "taken_at": None, "width": None, "height": None}
     with Image.open(path) as img:
-        out["width"], out["height"] = img.size
+        w, h = img.size
         try:
             exif = img.getexif()
+            # Swap dims for 90/270-degree EXIF orientations (5,6,7,8).
+            if exif.get(_ORIENTATION_TAG) in (5, 6, 7, 8):
+                w, h = h, w
             # Merge the EXIF sub-IFD so DateTimeOriginal is reachable too.
             merged = dict(exif)
             try:
@@ -83,4 +93,5 @@ def read_metadata(path) -> dict:
             out["taken_at"] = extract_taken_at(merged)
         except Exception:
             pass
+        out["width"], out["height"] = w, h
     return out

@@ -113,8 +113,13 @@ def read_metadata(path) -> dict:
 
     for stream in data.get("streams", []):
         if stream.get("codec_type") == "video" and out["vcodec"] is None:
-            out["width"] = stream.get("width")
-            out["height"] = stream.get("height")
+            w, h = stream.get("width"), stream.get("height")
+            # Account for rotation so dims match the displayed orientation
+            # (ffmpeg auto-applies rotation when transcoding the web version).
+            rot = _stream_rotation(stream)
+            if w and h and abs(rot) % 180 == 90:
+                w, h = h, w
+            out["width"], out["height"] = w, h
             out["vcodec"] = (stream.get("codec_name") or "").lower() or None
             if not out["taken_at"]:
                 stags = {k.lower(): v for k, v in (stream.get("tags") or {}).items()}
@@ -123,6 +128,23 @@ def read_metadata(path) -> dict:
         elif stream.get("codec_type") == "audio" and out["acodec"] is None:
             out["acodec"] = (stream.get("codec_name") or "").lower() or None
     return out
+
+
+def _stream_rotation(stream: dict) -> int:
+    """Extract rotation (degrees) from tags or Display Matrix side data."""
+    tags = {k.lower(): v for k, v in (stream.get("tags") or {}).items()}
+    if "rotate" in tags:
+        try:
+            return int(tags["rotate"])
+        except (TypeError, ValueError):
+            pass
+    for sd in stream.get("side_data_list", []) or []:
+        if "rotation" in sd:
+            try:
+                return int(sd["rotation"])
+            except (TypeError, ValueError):
+                pass
+    return 0
 
 
 def needs_web_version(path, meta: dict) -> bool:

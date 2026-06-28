@@ -46,3 +46,11 @@ def test_needs_web_version():
     assert needs_web_version("x.mkv", {"vcodec": "h264", "acodec": "aac"}) is True
     # unknown codecs -> play original (don't transcode blindly)
     assert needs_web_version("x.mp4", {"vcodec": None, "acodec": None}) is False
+
+
+@pytest.mark.unit
+def test_stream_rotation():
+    from app.video import _stream_rotation
+    assert _stream_rotation({"side_data_list": [{"rotation": -90}]}) == -90
+    assert _stream_rotation({"tags": {"rotate": "270"}}) == 270
+    assert _stream_rotation({}) == 0
